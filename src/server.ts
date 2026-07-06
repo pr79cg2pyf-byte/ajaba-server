@@ -7,6 +7,7 @@ import taskRoutes from './routes/tasks';
 import templateRoutes from './routes/taskTemplates';
 import supplierRoutes from './routes/suppliers';
 import creditRoutes from './routes/credits';
+import dashboardRoutes from './routes/dashboard';
 import { startScheduler } from './services/scheduler';
 
 const app = express();
@@ -22,6 +23,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/task-templates', templateRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/credits', creditRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Start
 app.listen(PORT, () => {
