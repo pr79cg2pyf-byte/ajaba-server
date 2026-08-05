@@ -117,6 +117,15 @@ async function migrate() {
       created_at       TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
+        `CREATE TABLE IF NOT EXISTS claim_history (
+      history_id   TEXT PRIMARY KEY,
+      claim_id     TEXT NOT NULL REFERENCES credit_claims(claim_id) ON DELETE CASCADE,
+      changed_by   TEXT REFERENCES users(user_id),
+      old_status   TEXT,
+      new_status   TEXT,
+      notes        TEXT,
+      changed_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
         `CREATE TABLE IF NOT EXISTS ocr_scans (
       scan_id           TEXT PRIMARY KEY,
       store_id          TEXT NOT NULL REFERENCES stores(store_id),
