@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 
-const BASE_URL = 'http://localhost:8787';
+const BASE_URL = process.env.AJABA_TEST_URL!;
+if (!BASE_URL) throw new Error('Integration tests require the isolated test server.');
 const VALID_USER = { username: 'andy', pin: '1234' };
 const STORE_ID = 'store-valley-001';
 

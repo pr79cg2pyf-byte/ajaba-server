@@ -2,12 +2,35 @@
 
 import { getDb, closeDb, execute } from './connection';
 
-async function migrate(): Promise<void> {
+export async function migrate(): Promise<void> {
   const db = await getDb();
 
   console.log('[migrate] Creating tables...');
 
   const statements = [
+    `CREATE TABLE IF NOT EXISTS expiry_records (
+      store_id TEXT NOT NULL REFERENCES stores(store_id),
+      record_id TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      updated_by TEXT NOT NULL REFERENCES users(user_id),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(store_id, record_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS expiry_record_mutations (
+      store_id TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      mutation_id TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      response_json TEXT NOT NULL,
+      PRIMARY KEY(store_id, record_id, mutation_id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS expiry_claim_links (
+      store_id TEXT NOT NULL,
+      expiry_record_id TEXT NOT NULL,
+      claim_id TEXT NOT NULL REFERENCES credit_claims(claim_id),
+      PRIMARY KEY(store_id, expiry_record_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS stores (
       store_id    TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
@@ -190,10 +213,9 @@ async function migrate(): Promise<void> {
   }
 
   console.log(`[migrate] ${statements.length} tables created successfully.`);
-  closeDb();
 }
 
-migrate().catch(err => {
+if (require.main === module) migrate().then(() => closeDb()).catch(err => {
   console.error('[migrate] Failed:', err);
   process.exit(1);
 });

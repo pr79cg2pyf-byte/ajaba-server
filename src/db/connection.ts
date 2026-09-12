@@ -4,20 +4,16 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DB_PATH = path.join(__dirname, '..', '..', 'data', 'ajaba.db');
+export const DB_PATH = path.resolve(process.env.AJABA_DB_PATH || path.join(__dirname, '..', '..', 'data', 'ajaba.db'));
+if (process.env.NODE_ENV === 'test' && !process.env.AJABA_DB_PATH) throw new Error('Tests require an explicit AJABA_DB_PATH; refusing to open the application database.');
 
 let db: SqlJsDatabase | null = null;
 let dbBuffer: Buffer;
+let databaseFactory: Awaited<ReturnType<typeof initSqlJs>> | null = null;
 
 // Load or create the database file
 function loadDbFile(): Buffer {
-  try {
-    if (fs.existsSync(DB_PATH)) {
-      return fs.readFileSync(DB_PATH);
-    }
-  } catch (err) {
-    console.warn(`[db] Could not read existing DB, creating new one: ${err}`);
-  }
+  if (fs.existsSync(DB_PATH)) return fs.readFileSync(DB_PATH);
   return Buffer.alloc(0);
 }
 
@@ -27,13 +23,17 @@ function saveDb(): void {
   const data = db.export();
   const buffer = Buffer.from(data);
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.writeFileSync(DB_PATH, buffer);
+  const temporary = `${DB_PATH}.tmp`;
+  const fd = fs.openSync(temporary, 'w');
+  try { fs.writeFileSync(fd, buffer); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  fs.renameSync(temporary, DB_PATH);
 }
 
 // Initialize and get database instance
 export async function getDb(): Promise<SqlJsDatabase> {
   if (!db) {
     const SQL = await initSqlJs();
+    databaseFactory = SQL;
     dbBuffer = loadDbFile();
     db = new SQL.Database(dbBuffer);
 
@@ -54,6 +54,23 @@ export async function getDb(): Promise<SqlJsDatabase> {
 export function saveToDisk(): void {
   saveDb();
   console.log('[db] Saved to disk');
+}
+
+/** Roll back in-memory changes too if the durable snapshot cannot be written. */
+export function durableWrite<T>(database: SqlJsDatabase, write: () => T): T {
+  const before = database.export();
+  try {
+    database.run('BEGIN TRANSACTION');
+    const result = write();
+    database.run('COMMIT');
+    saveDb();
+    return result;
+  } catch (error) {
+    database.close();
+    db = new databaseFactory!.Database(before);
+    db.run('PRAGMA foreign_keys = ON');
+    throw error;
+  }
 }
 
 export function closeDb(): void {

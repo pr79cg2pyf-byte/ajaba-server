@@ -3,6 +3,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
 import { JwtPayload } from '../types';
+import { getDb, queryOne } from '../db/connection';
 
 // In production, this should be an environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'ajaba-dev-secret-change-in-production';
@@ -14,6 +15,22 @@ export function signToken(payload: JwtPayload): string {
 
 export function verifyToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload;
+}
+
+/** Verify current membership so revoked accounts cannot access store data. */
+export async function requireActiveStore(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = req.user;
+    const current = user && queryOne(await getDb(), 'SELECT store_id, is_active FROM users WHERE user_id = ?', [user.user_id]);
+    if (!current?.is_active || current.store_id !== user?.store_id) {
+      res.status(401).json({ error: 'Account or store access changed. Please sign in again.' }); return;
+    }
+    const requestedStore = req.query.store_id ?? req.body?.store_id ?? req.body?.record?.storeId;
+    if (requestedStore && requestedStore !== user?.store_id) {
+      res.status(403).json({ error: 'This session cannot access another store.' }); return;
+    }
+    next();
+  } catch (error) { next(error); }
 }
 
 // Express middleware — attach user to request or return 401
