@@ -37,8 +37,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DB_PATH = void 0;
 exports.getDb = getDb;
 exports.saveToDisk = saveToDisk;
+exports.durableWrite = durableWrite;
 exports.closeDb = closeDb;
 exports.queryAll = queryAll;
 exports.queryOne = queryOne;
@@ -46,19 +48,16 @@ exports.execute = execute;
 const sql_js_1 = __importDefault(require("sql.js"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const DB_PATH = path.join(__dirname, '..', '..', 'data', 'ajaba.db');
+exports.DB_PATH = path.resolve(process.env.AJABA_DB_PATH || path.join(__dirname, '..', '..', 'data', 'ajaba.db'));
+if (process.env.NODE_ENV === 'test' && !process.env.AJABA_DB_PATH)
+    throw new Error('Tests require an explicit AJABA_DB_PATH; refusing to open the application database.');
 let db = null;
 let dbBuffer;
+let databaseFactory = null;
 // Load or create the database file
 function loadDbFile() {
-    try {
-        if (fs.existsSync(DB_PATH)) {
-            return fs.readFileSync(DB_PATH);
-        }
-    }
-    catch (err) {
-        console.warn(`[db] Could not read existing DB, creating new one: ${err}`);
-    }
+    if (fs.existsSync(exports.DB_PATH))
+        return fs.readFileSync(exports.DB_PATH);
     return Buffer.alloc(0);
 }
 // Save database to disk
@@ -67,13 +66,23 @@ function saveDb() {
         return;
     const data = db.export();
     const buffer = Buffer.from(data);
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fs.writeFileSync(DB_PATH, buffer);
+    fs.mkdirSync(path.dirname(exports.DB_PATH), { recursive: true });
+    const temporary = `${exports.DB_PATH}.tmp`;
+    const fd = fs.openSync(temporary, 'w');
+    try {
+        fs.writeFileSync(fd, buffer);
+        fs.fsyncSync(fd);
+    }
+    finally {
+        fs.closeSync(fd);
+    }
+    fs.renameSync(temporary, exports.DB_PATH);
 }
 // Initialize and get database instance
 async function getDb() {
     if (!db) {
         const SQL = await (0, sql_js_1.default)();
+        databaseFactory = SQL;
         dbBuffer = loadDbFile();
         db = new SQL.Database(dbBuffer);
         // Enable WAL-like pragmas (sql.js runs in memory, but we simulate pragmas)
@@ -90,6 +99,23 @@ async function getDb() {
 function saveToDisk() {
     saveDb();
     console.log('[db] Saved to disk');
+}
+/** Roll back in-memory changes too if the durable snapshot cannot be written. */
+function durableWrite(database, write) {
+    const before = database.export();
+    try {
+        database.run('BEGIN TRANSACTION');
+        const result = write();
+        database.run('COMMIT');
+        saveDb();
+        return result;
+    }
+    catch (error) {
+        database.close();
+        db = new databaseFactory.Database(before);
+        db.run('PRAGMA foreign_keys = ON');
+        throw error;
+    }
 }
 function closeDb() {
     if (db) {

@@ -5,15 +5,34 @@ import { requireAuth } from '../middleware/auth';
 const router = Router();
 router.use(requireAuth);
 
+/**
+ * A user may only read their own store; owners may read any store.
+ * Mirrors the credits route scope so dashboards cannot leak another store's data.
+ */
+function resolveStoreScope(req: Request, res: Response): string | null {
+  const sessionStore = req.user!.store_id;
+  const requested = req.query.store_id ?? sessionStore;
+  if (typeof requested !== 'string' || !requested.trim()) {
+    res.status(400).json({ error: 'A valid store is required.' });
+    return null;
+  }
+  if (requested !== sessionStore && req.user!.role !== 'owner') {
+    res.status(403).json({ error: 'This account cannot access another store.' });
+    return null;
+  }
+  return requested;
+}
+
 // ============================================================
 // GET /summary — aggregated dashboard data
 // ============================================================
 router.get('/summary', async (req: Request, res: Response) => {
   try {
+    const storeId = resolveStoreScope(req, res);
+    if (storeId === null) return;
     const db = await getDb();
-    const { store_id } = req.query;
-    const storeFilter = store_id ? 'WHERE store_id = ?' : '';
-    const storeParams: any[] = store_id ? [store_id] : [];
+    const storeFilter = 'WHERE store_id = ?';
+    const storeParams: any[] = [storeId];
 
     // Task stats
     const taskStats = queryOne(db, `
@@ -33,7 +52,7 @@ router.get('/summary', async (req: Request, res: Response) => {
     `, storeParams);
 
     // Credit stats (use credits filter, not tasks)
-    const creditFilter = store_id ? 'WHERE cc.store_id = ?' : '';
+    const creditFilter = 'WHERE cc.store_id = ?';
     const creditStats = queryOne(db, `
       SELECT
         COUNT(*) as total_claims,
@@ -49,12 +68,12 @@ router.get('/summary', async (req: Request, res: Response) => {
              COALESCE(SUM(cc.total_claim), 0) as total_value
       FROM credit_claims cc
       JOIN suppliers s ON cc.supplier_id = s.supplier_id
-      ${creditFilter.replace(/store_id/g, 'cc.store_id')}
+      ${creditFilter}
       GROUP BY cc.supplier_id ORDER BY total_value DESC
     `, storeParams);
 
     res.json({
-      store_id: store_id || 'all',
+      store_id: storeId,
       total_tasks: taskStats?.total_tasks ?? 0,
       pending_tasks: taskStats?.pending_tasks ?? 0,
       completed_tasks: taskStats?.completed_tasks ?? 0,

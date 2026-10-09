@@ -36,8 +36,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.signToken = signToken;
 exports.verifyToken = verifyToken;
+exports.requireActiveStore = requireActiveStore;
 exports.requireAuth = requireAuth;
 const jwt = __importStar(require("jsonwebtoken"));
+const connection_1 = require("../db/connection");
 // In production, this should be an environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'ajaba-dev-secret-change-in-production';
 const JWT_EXPIRES_IN = '12h';
@@ -46,6 +48,26 @@ function signToken(payload) {
 }
 function verifyToken(token) {
     return jwt.verify(token, JWT_SECRET);
+}
+/** Verify current membership so revoked accounts cannot access store data. */
+async function requireActiveStore(req, res, next) {
+    try {
+        const user = req.user;
+        const current = user && (0, connection_1.queryOne)(await (0, connection_1.getDb)(), 'SELECT store_id, is_active FROM users WHERE user_id = ?', [user.user_id]);
+        if (!current?.is_active || current.store_id !== user?.store_id) {
+            res.status(401).json({ error: 'Account or store access changed. Please sign in again.' });
+            return;
+        }
+        const requestedStore = req.query.store_id ?? req.body?.store_id ?? req.body?.record?.storeId;
+        if (requestedStore && requestedStore !== user?.store_id) {
+            res.status(403).json({ error: 'This session cannot access another store.' });
+            return;
+        }
+        next();
+    }
+    catch (error) {
+        next(error);
+    }
 }
 function requireAuth(req, res, next) {
     const authHeader = req.headers.authorization;

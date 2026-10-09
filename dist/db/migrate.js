@@ -1,11 +1,35 @@
 "use strict";
 // Database migration: create all v0.7 tables (sql.js version)
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.migrate = migrate;
 const connection_1 = require("./connection");
 async function migrate() {
     const db = await (0, connection_1.getDb)();
     console.log('[migrate] Creating tables...');
     const statements = [
+        `CREATE TABLE IF NOT EXISTS expiry_records (
+      store_id TEXT NOT NULL REFERENCES stores(store_id),
+      record_id TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      updated_by TEXT NOT NULL REFERENCES users(user_id),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(store_id, record_id)
+    )`,
+        `CREATE TABLE IF NOT EXISTS expiry_record_mutations (
+      store_id TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      mutation_id TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      response_json TEXT NOT NULL,
+      PRIMARY KEY(store_id, record_id, mutation_id)
+    )`,
+        `CREATE TABLE IF NOT EXISTS expiry_claim_links (
+      store_id TEXT NOT NULL,
+      expiry_record_id TEXT NOT NULL,
+      claim_id TEXT NOT NULL REFERENCES credit_claims(claim_id),
+      PRIMARY KEY(store_id, expiry_record_id)
+    )`,
         `CREATE TABLE IF NOT EXISTS stores (
       store_id    TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
@@ -176,10 +200,10 @@ async function migrate() {
         (0, connection_1.execute)(db, sql);
     }
     console.log(`[migrate] ${statements.length} tables created successfully.`);
-    (0, connection_1.closeDb)();
 }
-migrate().catch(err => {
-    console.error('[migrate] Failed:', err);
-    process.exit(1);
-});
+if (require.main === module)
+    migrate().then(() => (0, connection_1.closeDb)()).catch(err => {
+        console.error('[migrate] Failed:', err);
+        process.exit(1);
+    });
 //# sourceMappingURL=migrate.js.map
