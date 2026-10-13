@@ -7,10 +7,12 @@ import supplierRoutes from './routes/suppliers';
 import creditRoutes from './routes/credits';
 import dashboardRoutes from './routes/dashboard';
 import expiryRoutes from './routes/expiryRecords';
+import productRoutes from './routes/products';
 
 export function createApp() {
   const app = express();
   app.use(cors());
+  app.use('/api/products', express.json({ limit: '25mb' }), productRoutes);
   app.use(express.json({ limit: '10mb' }));
   app.use('/api', authRoutes);
   app.use('/api/tasks', taskRoutes);

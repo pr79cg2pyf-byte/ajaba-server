@@ -52,3 +52,7 @@ src/
 | GET | /api/auth/me | JWT | Current user info |
 | GET | /api/expiry-records | JWT + active store | Current store's durable expiry records |
 | PUT | /api/expiry-records/:id | JWT + active store | Save with `record`, `expectedVersion`, `mutationId`; stale writes return 409 with the server record |
+
+## Store Product Master
+
+All `/api/products` endpoints require JWT authentication and active membership in the token's store. `GET /api/products/version` returns `{ version, count, updatedAt, updatedBy }`, or `{ version: 0, count: 0 }` before the first upload. Devices poll this small response and notify the user of newer versions; they download only when the user taps, never automatically. `GET /api/products` returns `{ version, count, updatedAt, products }` (before upload: `{ version: 0, count: 0, products: [] }`). Owner/manager `PUT /api/products` accepts `{ products }` with 1–50,000 products, replaces the whole list durably, increments the version and returns the version metadata. Invalid products return 400 with the first bad row number and leave the previous list unchanged. Uploads allow up to 25 MB; other routes retain the 10 MB limit.

@@ -8,6 +8,15 @@ export async function migrate(): Promise<void> {
   console.log('[migrate] Creating tables...');
 
   const statements = [
+    // ponytail: One blob per store; split into rows if partial updates or more than 50k products are needed.
+    `CREATE TABLE IF NOT EXISTS product_masters (
+      store_id TEXT PRIMARY KEY REFERENCES stores(store_id),
+      version INTEGER NOT NULL,
+      product_count INTEGER NOT NULL,
+      products_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT NOT NULL
+    )`,
     `CREATE TABLE IF NOT EXISTS expiry_records (
       store_id TEXT NOT NULL REFERENCES stores(store_id),
       record_id TEXT NOT NULL,
