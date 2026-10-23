@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.db
 .env
+src/build-info.json
