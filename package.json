@@ -1,11 +1,12 @@
 {
   "name": "ajaba-server",
-  "version": "0.7.0",
+  "version": "0.7.1-dev.20261022",
   "description": "Ajaba Smart Shelf Backend — expiry tracking for independent supermarkets",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "node scripts/write-build-info.cjs && tsc",
+    "pretest": "node scripts/write-build-info.cjs",
     "start": "node dist/server.js",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",

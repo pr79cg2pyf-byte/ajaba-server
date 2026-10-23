@@ -8,10 +8,15 @@ import creditRoutes from './routes/credits';
 import dashboardRoutes from './routes/dashboard';
 import expiryRoutes from './routes/expiryRecords';
 import productRoutes from './routes/products';
+import build from './build-info.json';
 
 export function createApp() {
   const app = express();
   app.use(cors());
+  app.get('/api/version', (_req, res) => {
+    const { version } = require('../package.json') as { version: string };
+    res.json({ service: 'ajaba-server', version, build });
+  });
   app.use('/api/products', express.json({ limit: '25mb' }), productRoutes);
   app.use(express.json({ limit: '10mb' }));
   app.use('/api', authRoutes);
